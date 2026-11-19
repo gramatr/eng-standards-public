@@ -1,0 +1,74 @@
+{
+  "_generated": "Generated from src/clickhouse.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "engines": {
+    "clickhouse-server": ">=24.3"
+  },
+  "prohibited": [
+    "mutations_for_frequent_updates",
+    "unpartitioned_fact_tables"
+  ],
+  "prohibited_notes": {
+    "mutations_for_frequent_updates": "ALTER TABLE ... UPDATE/DELETE are heavy background mutations — use ReplacingMergeTree or append-only design",
+    "unpartitioned_fact_tables": "Fact tables without PARTITION BY cannot be pruned by date — retention and query performance degrade"
+  },
+  "approved_clients": {
+    "python": {
+      "package": "clickhouse-connect",
+      "version": ">=0.7",
+      "description": "Official ClickHouse Python client — HTTP-based, supports async"
+    },
+    "python_legacy": {
+      "package": "clickhouse-driver",
+      "version": ">=0.2",
+      "description": "Native protocol client — use only if clickhouse-connect lacks a needed feature"
+    }
+  },
+  "rules": {
+    "partition_key_required": {
+      "enforced": true,
+      "reason": "All MergeTree tables must declare PARTITION BY — unpartitioned tables are unmanageable at scale"
+    },
+    "order_by_required": {
+      "enforced": true,
+      "reason": "ORDER BY (sort key) must be designed for primary query patterns — wrong sort key causes full scans"
+    },
+    "no_nullable_in_order_by": {
+      "enforced": true,
+      "reason": "Nullable columns in sort/primary key produce undefined ordering — use empty string or sentinel value"
+    },
+    "ttl_for_hot_data": {
+      "recommendation": true,
+      "reason": "Define TTL MOVE policies to tier data from NVMe to HDD/S3 — avoids unbounded disk growth"
+    },
+    "explicit_codec_on_wide_tables": {
+      "recommendation": true,
+      "reason": "CODEC(ZSTD) on string columns, CODEC(DoubleDelta, LZ4) on timestamps reduce storage 40-70%"
+    },
+    "materialized_views_for_aggregates": {
+      "recommendation": true,
+      "reason": "Pre-aggregate in MV at insert time — dashboard queries must not scan full fact tables"
+    },
+    "tenant_filter_required": {
+      "enforced": true,
+      "reason": "Every app-layer query must include >tenant_id filter — see security.multi_tenancy_at_query_layer"
+    },
+    "explicit_column_projection": {
+      "enforced": true,
+      "reason": "Always select named columns — SELECT * reads all columns from all parts, orders of magnitude slower"
+    }
+  },
+  "prohibited_patterns": [
+    {
+      "pattern": "SELECT \\*",
+      "reason": "Column projection required — full scans are 10-100x more expensive on wide ClickHouse tables"
+    },
+    {
+      "pattern": "FINAL",
+      "reason": "SELECT ... FINAL forces merge at query time — use ReplacingMergeTree with background merge instead"
+    },
+    {
+      "pattern": "ORDER BY rand\\(\\)",
+      "reason": "Random sort on ClickHouse scans entire table — use LIMIT with primary key range instead"
+    }
+  ]
+}

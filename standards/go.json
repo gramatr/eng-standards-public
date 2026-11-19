@@ -1,0 +1,32 @@
+{
+  "_generated": "Generated from src/go.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "engines": {
+    "go": ">=1.22"
+  },
+  "approved": {
+    "golangci-lint": ">=1.59"
+  },
+  "notes": {
+    "golangci-lint": "Linter aggregator — staticcheck, govet, errcheck, and more in one run"
+  },
+  "lsp": {
+    "required": "gofmt",
+    "supplemental": "goimports",
+    "agent_requirement": {
+      "enforced": true,
+      "reason": "Agents generating or modifying Go must run gofmt + golangci-lint before declaring work complete — formatting and lint violations caught at write time, not review time",
+      "how": "gofmt -w <file> && golangci-lint run <file> — fix all errors; suppress only with a //nolint:<linter> comment and a rationale"
+    },
+    "claude_code": {
+      "enable": "gopls-lsp@claude-plugins-official",
+      "scope": "project",
+      "scope_reason": "Owner ruling 2026-07-25: LSP plugins are a per-machine setting (~/.claude/settings.json), and every enabled plugin is a real background process + a line in every session's plugin manifest -- not free. Go isn't in broad use across this org's repos yet (unlike TypeScript/Python, enabled at the user level as defaults), so gopls-lsp should be enabled per-project (that repo's own .claude/settings.json), not user-wide. A project's settings.json layers on top of the user's, so this adds gopls without touching the global default:\n  { \"enabledPlugins\": { \"gopls-lsp@claude-plugins-official\": true } }\n",
+      "note": "gopls is the official Go team language server -- covers formatting-on type info, hover, goToDefinition, documentSymbol. It does not replace golangci-lint; both stay in the pre-push/CI gate.\n"
+    }
+  },
+  "complexity": {
+    "tool": "golangci-lint (gocyclo or cyclop linter)",
+    "max_allowed": 15,
+    "note": "Matches node.yaml's floor for consistency across languages. Not yet validated against a real Go codebase in this org -- adopted as a sane cross-language default. gocyclo and cyclop measure slightly different things (cyclomatic vs cognitive complexity); either is acceptable, cyclop is the closer analogue to Biome's cognitive-complexity check.\n"
+  }
+}

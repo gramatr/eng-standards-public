@@ -1,0 +1,159 @@
+{
+  "_generated": "Generated from src/node.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "approved": {
+    "typescript": "^5.9",
+    "vitest": "^4.0",
+    "@vitest/coverage-istanbul": "^4.0",
+    "@vitest/coverage-v8": "^4.0",
+    "@biomejs/biome": "^2.0",
+    "turbo": "^2.0",
+    "tsx": "^4.0",
+    "zod": "^3.0",
+    "@modelcontextprotocol/sdk": "^1.12",
+    "pg": "^8.0",
+    "ioredis": "^5.0",
+    "axios": "^1.0",
+    "dotenv": "^16.0",
+    "uuid": "^10.0",
+    "jose": "^6.0"
+  },
+  "approved_optional": {
+    "express": "^5.0",
+    "react": "^19.0",
+    "next": "^15.0",
+    "better-sqlite3": "^12.0",
+    "firebase-admin": "^13.0"
+  },
+  "prohibited": [
+    "okapibm25",
+    "moment",
+    "lodash",
+    "underscore",
+    "request",
+    "node-fetch",
+    "babel-eslint",
+    "tslint",
+    "eslint"
+  ],
+  "notes": {
+    "typescript": "TypeScript compiler",
+    "vitest": "Test runner — replaces jest",
+    "@vitest/coverage-istanbul": "Source-level coverage provider for vitest — the approved default per coverage/thresholds.yaml's provider.preference. Avoids the V8 provider's ghost fnMap entries for multi-line async function signatures.\n",
+    "@vitest/coverage-v8": "Fallback coverage provider per coverage/thresholds.yaml's provider.fallback — must match vitest major. Prefer coverage-istanbul for new projects.\n",
+    "@biomejs/biome": "Linter + formatter — replaces eslint + prettier",
+    "turbo": "Monorepo build orchestration",
+    "tsx": "TypeScript execution without compile step",
+    "zod": "Runtime schema validation",
+    "@modelcontextprotocol/sdk": "MCP protocol SDK",
+    "pg": "PostgreSQL client",
+    "ioredis": "Redis client with full cluster support",
+    "axios": "HTTP client — prefer native fetch where possible",
+    "dotenv": "Environment variable loading",
+    "uuid": "RFC 4122 UUID generation",
+    "jose": "JWT/JWS/JWE primitives (sign + verify) over the Web Crypto API. Approved for the operator-context signed-JWS epic (gramatr-paas#440): gramatr-console signs operator-context tokens with EdDSA and platform-api verifies them via jwtVerify({ algorithms: ['EdDSA'] }). Already in use inside platform-core/packages/oidc-login; this entry lets gramatr-console and gramatr-paas add it directly and pass standards:check.\n",
+    "express": "HTTP framework — v5 required (v4 is EOL)",
+    "react": "UI library",
+    "next": "React framework — requires react ^19",
+    "better-sqlite3": "Embedded SQLite for local/test use",
+    "firebase-admin": "Firebase Admin SDK"
+  },
+  "prohibited_notes": {
+    "okapibm25": "Unmaintained since 2017 — inline the 30-line algorithm or use @orama/orama",
+    "moment": "Use native Intl API or date-fns — moment is in maintenance-only mode",
+    "lodash": "Use native ES2022+ array/object methods — tree-shaking is poor",
+    "underscore": "Use native ES2022+ methods",
+    "request": "Deprecated — use native fetch (Node 18+) or axios",
+    "node-fetch": "Use native fetch (Node 18+)",
+    "babel-eslint": "Deprecated — use @biomejs/biome",
+    "tslint": "Deprecated — use @biomejs/biome",
+    "eslint": "Use @biomejs/biome instead (faster, unified linter+formatter)"
+  },
+  "lsp": {
+    "required": "@biomejs/biome",
+    "supplemental": "typescript",
+    "agent_requirement": {
+      "enforced": true,
+      "reason": "Agents generating or modifying TypeScript must run Biome lint + tsc before declaring work complete — type errors and lint violations caught at write time, not review time",
+      "how": "biome check --write <file> && tsc --noEmit — fix all errors; suppress only with // biome-ignore <rule>: <rationale>"
+    },
+    "claude_code": {
+      "mechanism": "LSP servers are Claude Code plugins from the `claude-plugins-official` marketplace, enabled per-user via `enabledPlugins` in ~/.claude/settings.json (e.g. `\"typescript-lsp@claude-plugins-official\": true`). This is a per-machine setting — it does NOT propagate to other developers or to cloud-hosted/headless agents automatically. Each human (or machine) using Claude Code interactively needs to enable it once.\n",
+      "enable": {
+        "typescript_js": "typescript-lsp@claude-plugins-official",
+        "python": "pyright-lsp@claude-plugins-official"
+      },
+      "scope": "user",
+      "scope_reason": "Owner ruling 2026-07-25: TypeScript and Python are in broad enough use across this org's repos to justify a user-level default (every session on this machine gets them, no per-repo action needed). Go and Rust are NOT in broad enough use yet to justify the same — see go.yaml/rust.yaml's own scope_reason, which enable those two per-project instead. Revisit this split if usage patterns shift.\n",
+      "future_direction": "Manually toggling enabledPlugins in ~/.claude/settings.json is a stopgap. The intended end state is an org-side mechanism (an intelligence-packet style injection, or a future dedicated MCP server) detecting a project's language(s) and ensuring the right LSP plugin is active automatically, instead of a human maintaining this by hand -- platform-side work, not a local settings concern. Not built as of 2026-07-25; tracked as a real ask, not assumed done.\n",
+      "no_biome_lsp": "There is no dedicated Biome LSP plugin in this marketplace as of 2026-07-25. Biome stays enforced via CI (`biome ci`) and the pre-push hook (agent_requirement above), not via live diagnostics.\n",
+      "typescript_gotcha": "typescript-lsp initializes a real tsserver, which requires a workspace-local `typescript` package in node_modules — it fails with a clear \"Could not find a valid TypeScript installation\" error if `pnpm install`/`npm install` hasn't been run (or can't run, e.g. missing NODE_AUTH_TOKEN for private scoped packages). Get dependencies installed before expecting live TS diagnostics, not just before running tests.\n"
+    }
+  },
+  "complexity": {
+    "tool": "@biomejs/biome (complexity.noExcessiveCognitiveComplexity)",
+    "max_allowed": 15,
+    "codifies_existing_practice": "This threshold was already the de facto convention -- every consuming repo's biome.json copied `\"level\": \"error\", \"options\": { \"maxAllowedComplexity\": 15 }` from platform-core's original config without eng-standards itself ever stating the number. Making it explicit here so it's a documented standard, not tribal knowledge passed repo-to-repo by copy-paste.\n"
+  },
+  "ci_gates": {
+    "pr": {
+      "description": "Runs on every pull request — must pass before merge",
+      "steps": [
+        {
+          "id": "typecheck",
+          "command": "pnpm typecheck",
+          "description": "tsc --noEmit — zero errors required"
+        },
+        {
+          "id": "lint",
+          "command": "pnpm lint",
+          "description": "biome check — zero errors, zero warnings"
+        },
+        {
+          "id": "standards",
+          "command": "pnpm standards:check",
+          "description": "custom standards validator"
+        }
+      ]
+    },
+    "merge": {
+      "description": "Runs on merge to main — full quality gate",
+      "steps": [
+        {
+          "id": "typecheck",
+          "command": "pnpm typecheck"
+        },
+        {
+          "id": "lint",
+          "command": "pnpm lint"
+        },
+        {
+          "id": "standards",
+          "command": "pnpm standards:check"
+        },
+        {
+          "id": "build",
+          "command": "pnpm build"
+        },
+        {
+          "id": "test",
+          "command": "pnpm test:coverage"
+        }
+      ]
+    }
+  },
+  "git_hooks": {
+    "pre_push": {
+      "description": "Blocks git push if typecheck, lint, or standards fail locally. Mirrors the PR gate exactly so CI is never the first to catch failures.\n",
+      "install": "bash standards/scripts/install-hooks.sh",
+      "steps": [
+        "typecheck",
+        "lint",
+        "standards"
+      ]
+    }
+  }
+}

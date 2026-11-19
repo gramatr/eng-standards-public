@@ -1,0 +1,58 @@
+_meta:
+  name: kubernetes
+  description: Kubernetes manifest, Helm chart, and workload standards
+  domain: kubernetes
+  approver: Platform / Infra Lead
+
+engines:
+  kubernetes: ">=1.30"
+
+approved_distributions:
+  k3s:
+    description: Lightweight K8s for edge and home-lab workloads
+  k3s_version: ">=1.30"
+
+rules:
+  resource_limits_required:
+    enforced: true
+    reason: Every container must declare resources.requests and resources.limits — unbounded pods cause node evictions
+  non_root_required:
+    enforced: true
+    reason: securityContext.runAsNonRoot must be true — root containers are a security violation
+  no_latest_image_tag:
+    enforced: true
+    reason: Pinned semver tags or digests ensure reproducible deployments — :latest is mutable
+  liveness_probe_required:
+    enforced: true
+    reason: All Deployments must define livenessProbe — deadlocked pods are never restarted without it
+  readiness_probe_required:
+    enforced: true
+    reason: All Deployments must define readinessProbe — without it traffic routes to not-ready pods
+  explicit_namespace_required:
+    enforced: true
+    reason: Workloads must declare namespace — never deploy to default namespace
+  no_host_network:
+    enforced: true
+    reason: hostNetwork bypasses CNI isolation — prohibited except for infrastructure CNI components
+  secrets_from_k8s_secrets:
+    enforced: true
+    reason: Container secrets via envFrom secretRef or volume mounts — never hardcoded in manifests
+  read_only_root_filesystem:
+    recommendation: true
+    reason: readOnlyRootFilesystem prevents runtime writes to container FS — reduces blast radius
+  image_pull_policy_ifnotpresent:
+    recommendation: true
+    reason: IfNotPresent on pinned tags avoids unnecessary registry pulls on every pod start
+  gpu_resource_requests_for_inference:
+    enforced: true
+    reason: Inference workloads must request nvidia.com/gpu — prevents double-scheduling on Jetsons and 4090
+
+prohibited_patterns:
+  - pattern: "hostPID: true"
+    reason: Shares host PID namespace — container escape vector
+  - pattern: "privileged: true"
+    reason: Privileged containers have full host access — use capabilities instead
+  - pattern: "image: .*:latest"
+    reason: latest tag is mutable — pin to digest or semver tag
+  - pattern: "namespace: default"
+    reason: Use a named namespace — default is a dumping ground

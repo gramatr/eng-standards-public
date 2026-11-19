@@ -1,0 +1,104 @@
+_meta:
+  name: prefect
+  description: Certification requirements for Prefect-landed tables with no dbt model — closes the pre-dbt gap dbt.yaml named but deliberately left unsolved
+  domain: prefect
+  approver: Data Engineering Lead
+
+# ── Why this file exists ──────────────────────────────────────────────────────
+#
+# Added 2026-10-31, overriding the "named, not solved" stance dbt.yaml's
+# model_meta.openmetadata_bridging.not_required_yet shipped with in the same
+# PR. dbt.yaml's certification gates are scoped to dbt models by construction
+# — a table a Prefect flow writes directly, with no dbt model ever touching it
+# (e.g. content_identity_harvest), fell outside that file entirely and stayed
+# uncertified no matter how much other work depended on it.
+#
+# Overridden stance: certification is not optional just because a table is
+# pre-dbt. If a Prefect flow actively lands it and something else actually
+# depends on it, it has to be certified the same way a dbt model does — same
+# failure mode (silent drift between what's trusted and what's actually
+# checked), same fix.
+
+trigger:
+  description: >
+    This standard applies to a table when BOTH are true: (1) an active Prefect
+    flow writes to it directly, with no dbt model ever defined against it, and
+    (2) something else depends on it — another Prefect flow reads it, a dbt
+    source block references it, a Lightdash explore/chart queries it, a BI
+    report or dashboard outside Lightdash reads it, or any named external
+    consumer exists. "Touches other things" means a real, identifiable
+    consumer — not hypothetical future use.
+  not_triggered: >
+    A table with zero downstream consumers — scratch or staging output a flow
+    writes and reads only itself, nothing else touches — is explicitly out of
+    scope and stays uncertified. The moment a second consumer attaches to it,
+    this standard applies and the clock starts: bring it into compliance before
+    merging whatever change created that new dependency, not after.
+  owner_of_the_check: >
+    The flow's own repo (Prefect code, Ansible-deployed job, etc.) is
+    responsible for knowing whether its output table has consumers and for
+    certifying it once one appears — this is not something OpenMetadata or
+    dbt infra discovers on its own.
+
+certification_gates:
+  - discoverable
+  - certification_tag_matches
+  - lineage_present
+  - lightdash_renders_live (conditional — only where a chart/explore exists against the table)
+  - A named owner (team or individual) is on record for the table
+  - PII classification is explicit
+
+# ── Gates ─────────────────────────────────────────────────────────────────────
+#
+# Deliberately the same three mandatory gates dbt.yaml's openmetadata_bridging
+# requires for dbt models, plus the same conditional Lightdash gate — a
+# pre-dbt table that feeds other things deserves the identical bar, not a
+# weaker one just because dbt never touched it.
+
+gates:
+  - name: discoverable
+    requirement: >
+      The table exists as a searchable OpenMetadata entity before
+      certified=true is set on it. Verify directly — do not assume scheduled
+      metadata ingestion has already picked it up. A newly created or renamed
+      table can lag its own creation by up to one ingestion cycle.
+  - name: certification_tag_matches
+    requirement: >
+      OpenMetadata's own certification field is set and matches this table's
+      certified state, kept in sync in both directions. A stale certification
+      left over after a table stops being certified is the same bug as never
+      setting one — check both sides whenever either changes.
+    tooling_note: >
+      Reuse this org's existing Tier (1-5) classification for business-impact
+      scoping if relevant, but it is not a substitute for the certification
+      field itself — Tier answers how important the table is, certification
+      answers whether it's trustworthy and reviewed.
+  - name: lineage_present
+    requirement: >
+      Real lineage edges for the table's direct upstream (the Prefect flow or
+      source it's landed from) and downstream (every consumer identified by
+      the trigger above) exist in OpenMetadata's lineage graph. Automated
+      ingestion where the landing flow's metadata is published somewhere
+      OpenMetadata ingests it; otherwise a named, tracked manual bridge (link
+      the tracking issue on the table) is the acceptable stopgap — a silent
+      gap is not. A written provenance narrative is not a substitute; prose
+      doesn't get traversed by tooling or show up in impact analysis.
+  - name: lightdash_renders_live
+    requirement: >
+      Conditional, not universal: only applies where a Lightdash chart or
+      explore exists against this table. Where one does, it must render live
+      and non-empty, cross-checked against the real underlying data — not
+      just "the explore compiles with no errors."
+
+not_required_yet:
+  - >
+    Fully automated dbt-artifact-style lineage ingestion for Prefect flows —
+    not live anywhere in the org as of this writing. A named manual bridge is
+    the acceptable stopgap per the lineage_present gate above; this does not
+    relax once that automation exists for a given flow, the same way dbt.yaml
+    already commits to for dbt models.
+  - >
+    Retroactively auditing every existing Prefect-landed table for whether it
+    already has an undeclared downstream consumer. This standard governs new
+    and changed dependencies going forward; a backfill audit is tracked
+    separately, not assumed done by this file existing.

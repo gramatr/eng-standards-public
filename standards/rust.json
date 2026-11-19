@@ -1,0 +1,27 @@
+{
+  "_generated": "Generated from src/rust.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "engines": {
+    "rust": ">=1.75",
+    "edition": "2021"
+  },
+  "lsp": {
+    "required": "rustfmt",
+    "supplemental": "clippy",
+    "agent_requirement": {
+      "enforced": true,
+      "reason": "Agents generating or modifying Rust must run cargo fmt + cargo clippy before declaring work complete — formatting and lint violations caught at write time, not review time",
+      "how": "cargo fmt && cargo clippy --fix --allow-dirty -- fix all errors; suppress only with a #[allow(clippy::<lint>)] attribute and a rationale comment"
+    },
+    "claude_code": {
+      "enable": "rust-analyzer-lsp@claude-plugins-official",
+      "scope": "project",
+      "scope_reason": "Owner ruling 2026-07-25: same reasoning as go.yaml's scope_reason -- LSP plugins are a per-machine setting and a real running process, not free, so only languages in broad use across this org's repos (TypeScript/Python) are enabled at the user level as defaults. Rust should be enabled per-project (that repo's own .claude/settings.json):\n  { \"enabledPlugins\": { \"rust-analyzer-lsp@claude-plugins-official\": true } }\n",
+      "note": "rust-analyzer is the de facto standard Rust language server -- covers hover, goToDefinition, documentSymbol, inline diagnostics from cargo check. It does not replace cargo clippy's lint set; both stay in the pre-push/CI gate.\n"
+    }
+  },
+  "complexity": {
+    "tool": "clippy (clippy::cognitive_complexity lint, not enabled by default)",
+    "max_allowed": 15,
+    "note": "Matches node.yaml's floor for consistency across languages. Not yet validated against a real Rust codebase in this org -- adopted as a sane cross-language default. cognitive_complexity is an allow-by-default clippy lint; enable it explicitly (#![warn(clippy::cognitive_complexity)] or via clippy.toml) since it doesn't fire under default settings.\n"
+  }
+}

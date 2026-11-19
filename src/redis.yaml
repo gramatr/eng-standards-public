@@ -1,0 +1,57 @@
+_meta:
+  name: redis
+  description: Redis server version, key design, and usage standards
+  domain: redis
+  approver: Platform / Infra Lead
+
+engines:
+  redis: ">=7.2"
+
+approved_base_images:
+  redis:
+    image: "redis:7-alpine"
+    description: Local dev only — prod uses Redis Sentinel on dedicated VMs
+
+approved_clients:
+  python:
+    package: redis
+    version: ">=5.0"
+    description: redis-py — async support via redis.asyncio subpackage
+  node:
+    package: ioredis
+    version: ">=5.0"
+    description: ioredis — full Sentinel and cluster support
+
+rules:
+  ttl_on_all_keys:
+    enforced: true
+    reason: Every key set by application code must have a TTL — unbounded keys exhaust memory silently
+  namespaced_keys:
+    enforced: true
+    reason: Keys must be prefixed by service and entity type — e.g. live:geo:tv:dma-609 not just dma-609
+  key_schema_documented:
+    enforced: true
+    reason: Key patterns documented in module-level docstring or constants file — undocumented keyspaces become orphans
+  no_blocking_commands_in_async:
+    enforced: true
+    reason: BLPOP, BRPOP and other blocking commands must not run in async event loops — use non-blocking with polling
+  pipeline_for_bulk_writes:
+    recommendation: true
+    reason: Use pipeline() for 5+ sequential writes — reduces round-trip latency by 10-50x
+  sentinel_in_production:
+    enforced: true
+    reason: Production Redis uses Sentinel (3 nodes) for HA — single-node Redis is not acceptable for prod
+  no_flushdb_in_application_code:
+    enforced: true
+    reason: FLUSHDB/FLUSHALL must never appear in application code — only in test teardown with explicit guard
+  json_serialization_for_objects:
+    recommendation: true
+    reason: Use JSON (not pickle) for serialized objects — pickle is a code execution vector on deserialization
+
+prohibited:
+  pickle_serialization:
+    reason: Pickle deserialization executes arbitrary code — use JSON or msgpack
+  unnamespaced_keys:
+    reason: Keys without namespace prefix collide across services and make keyspace analysis impossible
+  redis_as_primary_database:
+    reason: Redis is a cache and pub/sub bus — durable data lives in PostgreSQL or ClickHouse

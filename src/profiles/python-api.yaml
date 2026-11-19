@@ -1,0 +1,12 @@
+_meta:
+  name: python-api
+  description: Python FastAPI or Flask service
+
+standards:
+  - python
+  - docker
+
+coverage: coverage/thresholds.json
+
+templates:
+  - templates/CLAUDE.python.md

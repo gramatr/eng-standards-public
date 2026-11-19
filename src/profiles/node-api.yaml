@@ -1,0 +1,11 @@
+_meta:
+  name: node-api
+  description: Node.js / TypeScript API or service — no frontend
+
+standards:
+  - node
+
+coverage: coverage/thresholds.json
+
+templates:
+  - templates/CLAUDE.node.md

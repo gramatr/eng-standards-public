@@ -1,0 +1,84 @@
+_meta:
+  name: code-structure
+  description: >
+    Mechanical proxies for "this code needs restructuring" -- duplication and
+    complexity -- and an explicit statement of what this org deliberately
+    does NOT use as a proxy (a blind file-length gate) and why.
+  domain: code-structure
+  approver: Engineering Lead (any)
+
+duplication:
+  tool: jscpd
+  threshold_pct: 1
+  min_tokens: 50
+  cross_language: true
+  codifies_existing_practice: >
+    jscpd was already adopted in platform-core (threshold 1, minTokens 50,
+    format restricted to typescript/tsx/javascript/jsx) but never promoted to
+    an eng-standards domain -- it was one repo's own convention, not an org
+    standard, and other repos (e.g. gramatr-paas) had no duplication check at
+    all. Making it explicit here so every repo gets it, not just the one that
+    happened to adopt it first.
+  format_note: >
+    jscpd is NOT JS/TS-specific despite platform-core's narrow `format` list
+    -- it's a general multi-language copy-paste detector (also supports
+    python, go, rust, and many more). A repo using multiple languages should
+    list all of them in its own .jscpd.json `format` array, not just the
+    ones platform-core happened to need.
+  config_template:
+    threshold: 1
+    minTokens: 50
+    reporters: ["console"]
+    absolute: true
+    gitignore: true
+    format: ["typescript", "tsx", "javascript", "jsx"]
+    ignore:
+      - "**/node_modules/**"
+      - "**/dist/**"
+      - "**/coverage/**"
+      - "**/.git/**"
+      - "**/*.test.*"
+      - "**/*.spec.*"
+      - "**/test/**"
+
+srp_approach:
+  summary: >
+    Single Responsibility Principle is a design judgment, not something any
+    linter can mechanically verify -- there is no real "SRP checker" in any
+    language's tooling ecosystem. This org uses two real, defensible
+    mechanical proxies instead of pretending one exists, and deliberately
+    does NOT use file length as a third.
+  proxy_1_complexity: >
+    Cognitive/cyclomatic complexity (see each language file's own
+    `complexity:` block -- node.yaml, python.yaml, go.yaml, rust.yaml) is the
+    primary proxy. A function doing too many things almost always shows up
+    as high branching/nesting complexity, which these tools measure directly
+    -- this is a much closer approximation of "doing too much" than raw line
+    count.
+  proxy_2_duplication: >
+    jscpd (this file's `duplication:` section) is the second proxy. The same
+    logic copy-pasted across multiple sites is itself an SRP smell -- it
+    means that responsibility was never given a single home. High
+    duplication + high complexity in the same area is a much stronger,
+    more specific signal than either alone.
+  explicitly_not_file_length: >
+    This org does NOT adopt a blind "file must be under N lines" gate, on
+    purpose, not by oversight. It produces both false positives and false
+    negatives relative to real SRP violations: a long file can be entirely
+    cohesive (many small, simple, related functions -- e.g. a page of
+    straightforward validation rules or a generated/data-heavy file), and a
+    short file can badly violate SRP (one 40-line function tangling three
+    unrelated concerns). Length correlates with complexity/duplication often
+    enough to look useful, but it's the correlation, not the cause -- gating
+    on it directly would force splitting cohesive files and miss tangled
+    small ones. If a real length-based signal is wanted later, make it
+    advisory (a comment/notice, not a CI failure) and let complexity +
+    duplication carry the actual enforcement.
+  when_a_human_or_agent_should_still_split_a_file: >
+    Mechanical proxies flag candidates; they don't replace judgment. Treat
+    "this file is long" as a prompt to ask "is it long because it's doing
+    multiple unrelated things (check: does it also show up in a jscpd
+    duplicate report, or contain a function tripping the complexity gate?),
+    or long because it's one cohesive thing with many straightforward parts
+    (in which case leave it alone)." The two mechanical proxies above are the
+    evidence for that judgment call, not a replacement for making it.

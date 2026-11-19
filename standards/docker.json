@@ -1,0 +1,39 @@
+{
+  "_generated": "Generated from src/docker.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "approved_base_images": {
+    "node": {
+      "image": "node:22-alpine",
+      "description": "Node.js app images — alpine keeps image under 200MB"
+    },
+    "python": {
+      "image": "python:3.12-slim",
+      "description": "Python app images — slim for most cases; alpine only if no compiled C deps"
+    },
+    "postgres": {
+      "image": "postgres:17-alpine",
+      "description": "PostgreSQL — use only for local dev and test; prod uses CloudNativePG"
+    },
+    "redis": {
+      "image": "redis:7-alpine",
+      "description": "Redis — use only for local dev; prod uses Redis Sentinel"
+    }
+  },
+  "rules": {
+    "no_latest_tag": {
+      "enforced": true,
+      "reason": "Pinned tags ensure reproducible builds and a clear audit trail"
+    },
+    "no_full_ubuntu_for_app_images": {
+      "enforced": true,
+      "reason": "Ubuntu base images are 100MB+ larger than alpine/slim without benefit"
+    },
+    "non_root_user_required": {
+      "enforced": true,
+      "reason": "Running as root in containers is a security violation"
+    },
+    "prefer_alpine_or_slim": {
+      "enforced": true,
+      "reason": "Smaller attack surface, faster pulls, smaller CVE exposure"
+    }
+  }
+}

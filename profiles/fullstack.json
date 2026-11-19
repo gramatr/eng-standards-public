@@ -1,0 +1,15 @@
+{
+  "_generated": "Generated from src/profiles/fullstack.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "name": "fullstack",
+  "description": "Next.js frontend + Python backend (React + FastAPI)",
+  "standards": [
+    "node",
+    "python",
+    "docker"
+  ],
+  "coverage": "coverage/thresholds.json",
+  "templates": [
+    "templates/CLAUDE.node.md",
+    "templates/CLAUDE.python.md"
+  ]
+}

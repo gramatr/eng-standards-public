@@ -1,0 +1,289 @@
+{
+  "_generated": "Generated from src/dbt.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "engines": {
+    "python": ">=3.12"
+  },
+  "approved": {
+    "dbt-core": ">=1.8",
+    "dbt-postgres": ">=1.8",
+    "dbt-clickhouse": ">=1.8",
+    "dbt-bigquery": ">=1.8"
+  },
+  "prohibited": [
+    "dbt-utils",
+    "dbt-fusion"
+  ],
+  "notes": {
+    "dbt-core": "dbt Core — 1.8 is the current LTS track",
+    "dbt-postgres": "dbt PostgreSQL adapter",
+    "dbt-clickhouse": "dbt ClickHouse adapter",
+    "dbt-bigquery": "dbt BigQuery adapter"
+  },
+  "prohibited_notes": {
+    "dbt-utils": "Evaluate each macro individually — blanket import pulls in unused code and creates implicit macro dependencies across the project",
+    "dbt-fusion": "Experimental Rust-based runtime — not production-validated; use dbt-core on the LTS track"
+  },
+  "rules": {
+    "sources_must_have_descriptions": true,
+    "models_must_have_descriptions": true,
+    "column_descriptions_required": false,
+    "unique_and_not_null_tests_required_on_primary_keys": true,
+    "max_model_sql_lines": 300,
+    "layer_tag_required": {
+      "enforced": true,
+      "values": [
+        "bronze",
+        "silver",
+        "gold"
+      ],
+      "reason": "Every model must declare its medallion layer — required for selective dbt run targeting and lineage tracing"
+    },
+    "refresh_tag_required": {
+      "enforced": true,
+      "values": [
+        "batch_refresh",
+        "manual"
+      ],
+      "reason": "Refresh cadence must be explicit — batch_refresh models are included in hourly dbt build runs; manual models require explicit invocation"
+    },
+    "schema_must_match_layer": {
+      "enforced": true,
+      "reason": "Schema assignment is load-bearing — gold queries JOIN across schemas by convention; misassignment silently breaks lineage"
+    }
+  },
+  "clickhouse_rules": {
+    "replicated_table_materialization_banned": {
+      "enforced": true,
+      "reason": "materialized='table' drops and recreates the table on every dbt run — Replicated engines register a ZooKeeper path at creation time that cannot be reclaimed while the replica entry exists. DROP TABLE does not remove the ZK path fast enough, causing Code 253 'Replica already exists' on the next CREATE. Use materialized='incremental' with incremental_strategy='append' for all Replicated tables."
+    },
+    "incremental_strategy": {
+      "required_value": "append",
+      "applies_to": "ReplacingMergeTree tables",
+      "reason": "append + ReplacingMergeTree _version dedup is the safe production pattern — merge strategy rewrites partitions and conflicts with concurrent consumer inserts"
+    },
+    "order_by_excludes_partition_key": {
+      "enforced": true,
+      "reason": "ReplacingMergeTree deduplication only operates within a single partition. If a column appears in both PARTITION BY and ORDER BY, the same logical key can exist in two partitions and will never be deduplicated — creating permanent duplicates on any re-ingestion or timezone edge case. Remove all PARTITION BY columns from ORDER BY."
+    },
+    "version_column": {
+      "name": "_version",
+      "type": "Int64",
+      "expression": "toInt64(toUnixTimestamp64Micro(now64(6)))",
+      "reason": "Microsecond Unix timestamp is monotonically increasing and deterministic across replicas — integer counters drift, wall-clock seconds collide on batch inserts"
+    },
+    "storage_policy_required": {
+      "enforced": true,
+      "value": "tiered",
+      "reason": "All MergeTree tables must declare SETTINGS storage_policy = 'tiered' — omission locks data to the hot NVMe tier and bypasses the HDD/S3 tiering policy"
+    },
+    "on_cluster_production": {
+      "enforced": true,
+      "cluster": "{cluster}",
+      "reason": "All DDL in production schemas must include ON CLUSTER '{cluster}' — single-node DDL creates schema drift between replicas that manifests as query errors or silent data loss"
+    },
+    "externally_owned_stubs": {
+      "pattern": "enabled=false",
+      "reason": "Tables populated by external consumer services (not dbt) must be declared as stubs with enabled=false — dbt must never drop or recreate a table it does not own. Include a comment in the model identifying the owning service."
+    },
+    "final_in_silver_gold_reads": {
+      "enforced": true,
+      "reason": "dbt models reading from ReplacingMergeTree silver tables must append FINAL to the source reference — background merge is not guaranteed complete at query time, omitting FINAL produces non-deterministic duplicate rows in batch aggregations",
+      "exception_of": "clickhouse.prohibited_patterns.FINAL",
+      "clarification": "The clickhouse.yaml FINAL prohibition targets high-frequency app-layer queries where merge-at-read latency is unacceptable. dbt gold models are batch jobs where correctness trumps latency — FINAL is required, not optional."
+    }
+  },
+  "naming_conventions": {
+    "models": {
+      "bronze": "bronze_{source}_{entity}",
+      "silver": "{entity} or int_{entity} for intermediates",
+      "gold": "gold_{metric}_{grain} or fact_{entity} or dim_{entity}"
+    },
+    "required_columns": {
+      "_version": {
+        "type": "Int64",
+        "required_on": "all incremental MergeTree models",
+        "reason": "ReplacingMergeTree dedup key — must be present and populated with toInt64(toUnixTimestamp64Micro(now64(6)))"
+      },
+      "_loaded_at": {
+        "type": "DateTime64(6)",
+        "required_on": "incremental silver and gold models",
+        "reason": "Watermark column for incremental filters — used in is_incremental() WHERE clauses to bound re-processing windows"
+      }
+    },
+    "prohibited_suffixes": {
+      "values": [
+        "_v2",
+        "_new",
+        "_old",
+        "_backup"
+      ],
+      "reason": "Versioned suffixes indicate an in-progress blue-green swap or schema migration — these must not be merged to main. Complete the swap and drop the suffix before merging."
+    }
+  },
+  "layer_contracts": {
+    "bronze": {
+      "schema": "{project}_bronze",
+      "engine": "ReplacingMergeTree",
+      "population": "Materialized Views triggered by lead table inserts — dbt defines structure only",
+      "partition_by": "Monthly (toYYYYMM) for most tables; daily for high-volume fact tables (>10M rows/day)",
+      "order_by_rule": "Natural business key(s) only — never include the partition column"
+    },
+    "silver": {
+      "schema": "{project}_silver",
+      "engine": "ReplacingMergeTree",
+      "population": "dbt incremental append, hourly via batch_refresh tag",
+      "reads_with_final": true,
+      "enrichment": "Geography resolution, JOIN to ref_* dimension tables, deduplication"
+    },
+    "gold": {
+      "schema": "{project}_gold",
+      "engine": "ReplacingMergeTree or view — view for simple pass-throughs, RMT for aggregations",
+      "population": "dbt incremental append, hourly via batch_refresh tag",
+      "reads_with_final": true,
+      "grain": "Must be declared in model description — one row per stated grain"
+    }
+  },
+  "schema_change_protocol": {
+    "method": "blue_green_swap",
+    "steps": {
+      "1": "Create {table}_new with the corrected schema under a new ZooKeeper path",
+      "2": "Backfill {table}_new using day-by-day resumable scripts — never truncate the live table",
+      "3": "Verify: row count delta <1%, duplicate check = 0, spot-check geo and engagement fill rates",
+      "4": "RENAME TABLE {table} TO {table}_old, {table}_new TO {table} ON CLUSTER '{cluster}'",
+      "5": "Run dbt build to confirm incremental appends land correctly in the renamed table",
+      "6": "DROP TABLE {table}_old only after explicit sign-off — keep for minimum 24 hours post-swap"
+    },
+    "prohibited": "ALTER TABLE ... MODIFY ORDER BY on a live Replicated table — not supported; causes replica divergence"
+  },
+  "backfill_standards": {
+    "pattern": "day_by_day",
+    "parameter": "{backfill_date:Date}",
+    "resumable": {
+      "enforced": true,
+      "reason": "Backfills against production ClickHouse can take hours — scripts must check for existing rows before inserting so a restart skips completed dates rather than double-loading"
+    },
+    "max_block_size": {
+      "default": 5000,
+      "reason": "UDF calls (resolveGeographies, etc.) process data in blocks — large blocks exceed the command_read_timeout and fail silently; 5000 rows/block keeps each UDF batch under 10 seconds"
+    },
+    "credentials": {
+      "pattern": "BWS cache",
+      "path": "~/.cache/bws/project-{project-id}.json",
+      "reason": "Credential files (.env.*) are machine-specific and not portable across hosts — read from BWS cache in scripts with a python3 one-liner"
+    },
+    "location": {
+      "directory": "scripts/",
+      "naming": "backfill_{schema}_{table}.sql and run_{schema}_{table}_backfill.sh"
+    }
+  },
+  "model_meta": {
+    "required_fields": {
+      "certified": {
+        "type": "boolean",
+        "default": false,
+        "reason": "Explicit certification gate — certified=true means tests pass, lineage is documented, provenance is complete, and a Data Engineering Lead has reviewed the model. Agents must not set certified=true without all gates passing."
+      },
+      "data_owner": {
+        "type": "string",
+        "example": "data-engineering",
+        "reason": "Accountable team for data quality SLA and incident response"
+      },
+      "source_systems": {
+        "type": "list",
+        "example": [
+          "lead_tracking_pageviews",
+          "lead_web_pageviews"
+        ],
+        "reason": "Explicit provenance — every certified model must trace its inputs to named source tables or external systems"
+      },
+      "sla": {
+        "type": "string",
+        "example": "hourly, within 5 minutes of the hour",
+        "reason": "Sets user expectations for freshness — required on any model surfaced in a dashboard or API"
+      },
+      "pii": {
+        "type": "string",
+        "values": [
+          "none",
+          "hashed",
+          "masked",
+          "present"
+        ],
+        "reason": "Privacy classification required before any model is exposed externally — governs which auth roles can access the data"
+      }
+    },
+    "optional_fields": {
+      "provenance": {
+        "type": "string",
+        "reason": "Narrative description of the data journey — source system → transformation steps → this model. Required for certified=true."
+      },
+      "deprecated": {
+        "type": "boolean",
+        "reason": "Mark models being phased out — tooling can warn consumers before removal"
+      }
+    },
+    "certification_gates": [
+      "All generic tests (unique, not_null) pass with severity=error",
+      "Model description is present and accurate",
+      "source_systems lists every upstream dependency",
+      "provenance narrative explains the transformation",
+      "pii classification is explicit",
+      "Data Engineering Lead has reviewed and approved",
+      "OpenMetadata bridging gates below are satisfied"
+    ],
+    "openmetadata_bridging": {
+      "gates": [
+        {
+          "name": "discoverable",
+          "requirement": "The model exists as a searchable OpenMetadata entity (table) before certified=true is set. Verify directly (search_metadata or equivalent) — do not assume the scheduled metadata-ingestion pipeline has already picked it up. A newly created or renamed model can lag behind its own creation by up to one ingestion cycle."
+        },
+        {
+          "name": "certification_tag_matches",
+          "requirement": "OpenMetadata's own certification field is set and matches dbt's certified meta flag — certified=true in dbt requires a real OpenMetadata certification value (not left at its default/absent state); certified=false or absent must not carry a stale certification value left over from before a model was de-certified. The two signals drifting apart silently is exactly the failure mode this section exists to close — check both sides whenever either one changes, not just once at initial certification.\n",
+          "tooling_note": "This org's OpenMetadata instance has a working Tier classification (Tier1-5, business-impact scale) already in real use — reuse it for business-impact scoping if relevant, but it is NOT a substitute for the certification field itself; they answer different questions (how important is this vs. is this trustworthy/reviewed).\n"
+        },
+        {
+          "name": "lineage_present",
+          "requirement": "At least the model's direct upstream and downstream edges exist in OpenMetadata's lineage graph. Two acceptable paths, in preference order: (1) automated — the repo's dbt artifacts (manifest.json/catalog.json) are published somewhere OpenMetadata's dbt connector ingests, so lineage updates on every dbt run with no manual step; (2) manual bridge — real edges entered via the OpenMetadata API/MCP (e.g. create_lineage) as a named, tracked stopgap (link the tracking issue in the model's provenance field) until (1) exists for that repo. A certified model with zero lineage edges in either direction is not actually certified — this already caused a real near-miss (a consumer dependency almost missed entirely because lineage was empty and the fact only lived in prose, 2026-10-26).\n",
+          "anti_pattern": "Treating a written provenance narrative (the existing required field above) as equivalent to real lineage edges. It is not — prose doesn't get traversed by tooling, doesn't show up in impact analysis, and has already been confirmed to let a real dependency slip through. Both are required; neither substitutes for the other.\n"
+        },
+        {
+          "name": "lightdash_renders_live",
+          "requirement": "Conditional, not universal: only applies where a Lightdash chart or explore actually exists against this model. Where one does, it must be confirmed rendering live — non-empty, cross-checked against the real underlying data — not just \"the explore compiles with no errors.\" A chart that compiles but silently returns zero rows, or rows that don't match a direct query against the source, is not evidence the model is trustworthy.\n",
+          "provenance": "Promoted from a project-local scope doc (insights-data-platform's own TVMedia certification work) that already held this exact bar informally, stricter than anything in this file — written here instead of staying local to one project so every repo gets it, not just the one that happened to invent it first.\n"
+        }
+      ],
+      "not_required_yet": [
+        "Fully automated dbt-artifact-based lineage ingestion for every repo — track this as the thing that, once it exists for a given repo, upgrades that repo's lineage_present gate from \"manual bridge acceptable\" to \"must be automated.\" Don't silently let a repo stay on the manual bridge forever once the automated path is available to it.",
+        "Prefect-landed tables with no dbt model at all are out of scope for this file by construction — model_meta only governs dbt models. They are NOT left uncertified: standards/prefect.json requires the same certification bar (discoverable, certification_tag_matches, lineage_present, conditional lightdash_renders_live) for any Prefect-landed table that an active flow feeds and that has a real downstream consumer. Overridden 2026-10-31 from an earlier \"named, not solved\" stance in this same PR — a pre-dbt table that other things depend on doesn't get a lower bar just because dbt never touched it.\n"
+      ]
+    }
+  },
+  "lsp": {
+    "required": "sqlfluff",
+    "dialect": "clickhouse",
+    "templater": "dbt",
+    "config_file": ".sqlfluff",
+    "agent_requirement": {
+      "enforced": true,
+      "reason": "Agents generating or modifying SQL must run LSP diagnostics before declaring work complete — silent lint failures become schema bugs in production",
+      "how": "Run sqlfluff lint on modified files; fix all errors before committing. Warnings may be suppressed with inline noqa only when accompanied by a rationale comment."
+    }
+  },
+  "prohibited_sql_patterns": [
+    {
+      "pattern": "SELECT \\*",
+      "reason": "Always select explicit columns — SELECT * breaks downstream schema contracts and reads all columns from all parts in ClickHouse"
+    },
+    {
+      "pattern": "materialized='table'",
+      "context": "ClickHouse Replicated engines",
+      "reason": "Causes ZooKeeper 'Replica already exists' (Code 253) on redeploy — use materialized='incremental' with incremental_strategy='append'"
+    },
+    {
+      "pattern": "DROP TABLE",
+      "context": "dbt post-hooks or operations",
+      "reason": "Use blue-green swap pattern — DROP in dbt context can permanently destroy externally-written data with no recovery path"
+    }
+  ]
+}

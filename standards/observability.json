@@ -1,0 +1,219 @@
+{
+  "_generated": "Generated from src/observability.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "approved_clients": {
+    "python_metrics": {
+      "package": "prometheus-client",
+      "version": ">=0.20",
+      "description": "Prometheus metrics exposition for Python services"
+    },
+    "python_tracing": {
+      "package": "opentelemetry-sdk",
+      "version": ">=1.24",
+      "description": "OpenTelemetry tracing SDK — use with opentelemetry-instrumentation-fastapi or -flask"
+    },
+    "python_logging": {
+      "package": "structlog",
+      "version": ">=24.0",
+      "description": "Structured logging for Python — outputs JSON in production, colored console in dev"
+    },
+    "node_metrics": {
+      "package": "prom-client",
+      "version": ">=15.0",
+      "description": "Prometheus metrics exposition for Node.js services"
+    },
+    "node_tracing": {
+      "package": "@opentelemetry/sdk-node",
+      "version": ">=0.52",
+      "description": "OpenTelemetry SDK for Node.js"
+    },
+    "node_logging": {
+      "package": "pino",
+      "version": ">=9.0",
+      "description": "Structured JSON logger for Node.js — fast, low-overhead, Grafana Loki compatible"
+    }
+  },
+  "logging": {
+    "format": "json",
+    "required_fields": [
+      "timestamp",
+      "level",
+      "service",
+      "message"
+    ],
+    "recommended_fields": [
+      "trace_id",
+      "span_id",
+      ">tenant_id",
+      "request_id"
+    ],
+    "rules": {
+      "no_print_in_production": {
+        "enforced": true,
+        "reason": "print() bypasses log level filtering and structured output — use structlog or pino"
+      },
+      "no_sensitive_data_in_logs": {
+        "enforced": true,
+        "reason": "Never log API keys, passwords, PII, or JWT tokens — log IDs and codes only"
+      },
+      "json_in_production": {
+        "enforced": true,
+        "reason": "Log aggregators (Loki, CloudWatch) parse JSON — plaintext logs cannot be queried"
+      },
+      "log_level_from_env": {
+        "enforced": true,
+        "reason": "LOG_LEVEL must be configurable via environment variable — hardcoded DEBUG ships to prod"
+      }
+    }
+  },
+  "metrics": {
+    "naming_convention": "snake_case",
+    "prefix_pattern": "<service_name>_",
+    "examples": [
+      "live_attribution_detections_total",
+      "superset_query_duration_seconds",
+      "cache_worker_windows_active"
+    ],
+    "scrape_endpoint": "/metrics",
+    "scrape_port_annotation": "prometheus.io/scrape: 'true'",
+    "required_per_service": [
+      "<service>_requests_total",
+      "<service>_request_duration_seconds",
+      "<service>_errors_total"
+    ],
+    "rules": {
+      "metrics_endpoint_required": {
+        "enforced": true,
+        "reason": "Every service must expose /metrics on its service port — Prometheus scrape target"
+      },
+      "histogram_for_latency": {
+        "enforced": true,
+        "reason": "Use Histogram (not Summary) for latency — Histograms aggregate across instances"
+      },
+      "no_high_cardinality_labels": {
+        "enforced": true,
+        "reason": "Never use >tenant_id, user_id, or request_id as Prometheus label — cardinality explosion"
+      },
+      "prometheus_annotation_required": {
+        "enforced": true,
+        "reason": "K8s pod template must include prometheus.io/scrape annotation for auto-discovery"
+      }
+    }
+  },
+  "tracing": {
+    "framework": "opentelemetry",
+    "propagation": "w3c-trace-context",
+    "required_spans": [
+      "http_server_requests",
+      "clickhouse_queries",
+      "redis_operations",
+      "websocket_messages"
+    ],
+    "rules": {
+      "trace_id_in_log_context": {
+        "enforced": true,
+        "reason": "trace_id must appear in every log record during a traced request — enables log-to-trace pivot"
+      },
+      "span_names_descriptive": {
+        "enforced": true,
+        "reason": "Span names must identify the operation — not generic strings like \"query\" or \"call\""
+      },
+      "baggage_for_tenant_id": {
+        "recommendation": true,
+        "reason": "Pass >tenant_id in OTel baggage so downstream spans can record tenant context"
+      }
+    }
+  },
+  "health_endpoints": {
+    "liveness": {
+      "path": "/health",
+      "description": "Returns 200 if the process is alive — should never depend on external systems",
+      "k8s_probe": "livenessProbe"
+    },
+    "readiness": {
+      "path": "/ready",
+      "description": "Returns 200 only when the service can handle traffic — checks DB, Redis, cache warm",
+      "k8s_probe": "readinessProbe"
+    },
+    "rules": {
+      "both_endpoints_required": {
+        "enforced": true,
+        "reason": "K8s uses both — liveness for restart decisions, readiness for traffic routing"
+      },
+      "health_must_not_call_external": {
+        "enforced": true,
+        "reason": "/health must return instantly — never queries ClickHouse or external APIs"
+      },
+      "ready_checks_dependencies": {
+        "enforced": true,
+        "reason": "/ready must verify Redis connectivity and DB pool — prevents traffic before warm"
+      }
+    }
+  },
+  "dashboards": {
+    "platform": "grafana",
+    "rules": {
+      "dashboard_required_per_service": {
+        "enforced": true,
+        "reason": "Every production service must have a named Grafana dashboard — undashboarded services are blind spots"
+      },
+      "dashboard_named_by_service": {
+        "enforced": true,
+        "description": "Dashboard UID and title must match Kubernetes service name",
+        "reason": "Consistent naming lets the monitoring agent locate the right dashboard automatically"
+      },
+      "golden_signals_panel_required": {
+        "enforced": true,
+        "description": "Every dashboard must include panels for latency (p50/p95/p99), error rate, and throughput",
+        "reason": "The four golden signals — latency, traffic, errors, saturation — are the minimum viable dashboard"
+      }
+    }
+  },
+  "alert_severity": {
+    "P1": {
+      "label": "critical",
+      "description": "Service is down or data is being lost or corrupted",
+      "response": "Page on-call immediately — acknowledge within 15 minutes",
+      "examples": [
+        "Attribution pipeline stopped writing to ClickHouse",
+        "Redis Sentinel quorum lost",
+        "Caddy TLS termination failing for customer-facing endpoints",
+        "Kubernetes node NotReady with running inference workloads"
+      ]
+    },
+    "P2": {
+      "label": "warning",
+      "description": "Service is degraded but not down — customer impact possible",
+      "response": "Create ticket, investigate within 4 hours during business hours",
+      "examples": [
+        "p99 latency above 2s on /api/live/events",
+        "Cache worker window flush lag above 30s",
+        "Any ClickHouse query exceeding 10s",
+        "Disk usage above 80% on any Ceph OSD"
+      ]
+    },
+    "P3": {
+      "label": "info",
+      "description": "Anomaly detected — no immediate customer impact",
+      "response": "Review in next standup or sprint",
+      "examples": [
+        "Curve fit R-squared below 0.5 for more than 10 consecutive windows",
+        "Attribution window count spike above 2x 7-day average",
+        "Submodule drift beyond 5 commits from eng-standards main"
+      ]
+    },
+    "rules": {
+      "all_alerts_must_have_severity": {
+        "enforced": true,
+        "reason": "Monitoring agent routes alerts by severity — unlabeled alerts are ignored"
+      },
+      "runbook_url_on_p1_p2": {
+        "enforced": true,
+        "reason": "Prometheus alert annotations must include runbook_url for P1 and P2 — no runbook means no fast resolution"
+      },
+      "no_alert_without_dashboard": {
+        "enforced": true,
+        "reason": "Every alert must link to a Grafana dashboard panel — alerts without panels cannot be investigated"
+      }
+    }
+  }
+}

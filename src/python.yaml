@@ -1,0 +1,153 @@
+_meta:
+  name: python
+  description: Python engineering floor versions
+  domain: python
+  approver: Engineering Lead (Python)
+  scope_note: >
+    As of 2026-07-25, real Python usage in this org is concentrated in
+    insights-data-platform's ~15 data-ingestion microservices (Prefect
+    pipelines, ClickHouse/Postgres writers), not web-API/OLTP services. The
+    `approved`/`approved_optional` split below reflects that: pipeline
+    tooling (uv, pyarrow-adjacent libs, DB drivers) is the common case;
+    fastapi/flask/sqlalchemy/alembic are optional web-framework tooling for
+    the minority of services that expose an HTTP API, not the default shape.
+
+engines:
+  python: ">=3.12"
+
+approved:
+  uv:
+    version: ">=0.4"
+    description: >
+      Package manager + lockfile (uv.lock) — the real, already-adopted
+      convention in newer data-pipeline services. Prefer over bare
+      pip/requirements.txt or Poetry for new projects.
+  pytest:
+    version: ">=8.0"
+    description: Test runner
+  pytest-cov:
+    version: ">=5.0"
+    description: Coverage plugin for pytest
+  pytest-asyncio:
+    version: ">=0.23"
+    description: Async test support
+  ruff:
+    version: ">=0.4"
+    description: Linter + formatter — replaces black, isort, flake8, pylint
+  mypy:
+    version: ">=1.10"
+    description: Static type checker
+  pydantic:
+    version: ">=2.0"
+    description: Runtime data validation and settings management
+  python-dotenv:
+    version: ">=1.0"
+    description: Environment variable loading
+  httpx:
+    version: ">=0.27"
+    description: HTTP client with async support — replaces requests
+  psycopg:
+    version: ">=3.1"
+    description: >
+      PostgreSQL adapter (psycopg3) — pipeline services write to Postgres
+      directly; prefer over psycopg2-binary for new code.
+  pyarrow:
+    version: ">=14.0"
+    description: Columnar data format — the real interchange format used by data-pipeline services
+  pandas:
+    version: ">=2.0"
+    description: Dataframe library used across data-pipeline services
+
+approved_optional:
+  psycopg2-binary:
+    version: ">=2.9"
+    description: Legacy PostgreSQL adapter — still present in some services; migrate to psycopg (psycopg3) where practical
+  sqlalchemy:
+    version: ">=2.0"
+    description: ORM and SQL toolkit — v2 required (v1 API removed); only for services that need an ORM, not a default
+  alembic:
+    version: ">=1.13"
+    description: Database migrations for SQLAlchemy
+  fastapi:
+    version: ">=0.110"
+    description: Modern async API framework — for the minority of services that expose an HTTP API
+  flask:
+    version: ">=3.0"
+    description: Lightweight WSGI framework — v3 required (v2 EOL)
+  uvicorn:
+    version: ">=0.29"
+    description: ASGI server for FastAPI
+  gunicorn:
+    version: ">=22.0"
+    description: WSGI server for Flask — v22 has security fixes
+  celery:
+    version: ">=5.3"
+    description: Distributed task queue
+  redis:
+    version: ">=5.0"
+    description: Redis client
+  boto3:
+    version: ">=1.34"
+    description: AWS SDK
+  click:
+    version: ">=8.1"
+    description: CLI framework
+  rich:
+    version: ">=13.0"
+    description: Terminal output formatting
+  textual:
+    version: ">=0.60"
+    description: TUI framework
+
+lsp:
+  required: ruff
+  supplemental: mypy
+  agent_requirement:
+    enforced: true
+    reason: Agents generating or modifying Python must run ruff check + mypy before declaring work complete — type errors and lint violations caught at write time, not review time
+    how: "ruff check --fix <file> && mypy <file> — fix all errors; suppress only with # noqa: <code> and a rationale comment"
+    ci_gate_note: >
+      This is a hard gate, not advisory — a CI step that runs mypy with
+      continue-on-error: true (or equivalent non-blocking config)
+      contradicts enforced:true above and must not be shipped. If mypy isn't
+      ready to block merge yet, set enforced:false here instead of running
+      it non-blocking; a soft-fail check that looks like a gate is worse
+      than no check.
+  # Claude Code specifically: same mechanism as node.yaml's lsp.claude_code
+  # block (Claude Code plugin, not a settings.json key) -- see there for the
+  # full explanation. Verified working 2026-07-25.
+  claude_code:
+    enable: "pyright-lsp@claude-plugins-official"
+    scope: user
+    scope_reason: see node.yaml's lsp.claude_code.scope_reason -- same ruling, same date, applies to both.
+    no_ruff_lsp: >
+      There is no dedicated ruff LSP plugin in this marketplace as of
+      2026-07-25. Ruff stays enforced via CLI (ruff check/format) and the
+      pre-push hook (agent_requirement above), not via live diagnostics.
+      pyright-lsp covers type-checking diagnostics (hover, goToDefinition,
+      documentSymbol); it does not lint or format.
+
+# See code-structure.yaml for the full reasoning: complexity + duplication
+# are the two mechanical proxies this org uses for "this code needs
+# restructuring" -- deliberately NOT a file-length gate.
+complexity:
+  tool: "ruff (C901 mccabe complexity)"
+  max_allowed: 15
+  note: >
+    Matches node.yaml's floor for consistency across languages. Unlike
+    node.yaml's 15 (already proven against real repos), this number has not
+    yet been validated against a real Python codebase in this org -- adopted
+    as a sane cross-language default, not yet battle-tested here. Revisit if
+    it proves too strict/loose in practice.
+
+prohibited:
+  black:
+    reason: Use ruff format instead — ruff is a strict superset of black
+  isort:
+    reason: Use ruff --select I instead — isort is redundant with ruff
+  flake8:
+    reason: Use ruff check instead — ruff covers all flake8 rules and more
+  pylint:
+    reason: Use ruff check + mypy — pylint is slow and redundant
+  requests:
+    reason: Use httpx — async-capable, modern interface, active development

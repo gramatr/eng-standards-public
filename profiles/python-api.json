@@ -1,0 +1,13 @@
+{
+  "_generated": "Generated from src/profiles/python-api.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "name": "python-api",
+  "description": "Python FastAPI or Flask service",
+  "standards": [
+    "python",
+    "docker"
+  ],
+  "coverage": "coverage/thresholds.json",
+  "templates": [
+    "templates/CLAUDE.python.md"
+  ]
+}

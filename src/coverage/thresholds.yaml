@@ -1,0 +1,36 @@
+_meta:
+  name: coverage-thresholds
+  description: Test coverage thresholds applied across all projects
+  domain: coverage
+  approver: Engineering Lead (any)
+
+thresholds:
+  new_file_minimum_avg: 80
+  regression_tolerance_pct: 0.5
+
+provider:
+  preference: istanbul
+  fallback: v8
+  notes:
+    istanbul: Instruments at source level — avoids V8 async function sourcemap duplicate-entry artifact
+    v8: Native V8 coverage — fast but produces ghost fnMap entries for async functions with multi-line signatures
+
+enforcement:
+  gate_wired_into_ci:
+    script: scripts/enforce-coverage-gate.ts
+    added: 2026-07-25
+    checks: >
+      Every package.json with a `test` or `test:coverage` script has a
+      matching CI job (or pnpm-workspace fanout job) whose steps invoke a
+      real coverage command (`test:coverage`, `--coverage`, etc.), not just
+      a bare test run. Added after gramatr-console's apps/ui sub-package
+      shipped a CI job running `npm run test` with no coverage step at all,
+      caught only by manual review.
+    not_covered_by_this_file: >
+      This thresholds.yaml only defines the new_file_minimum_avg /
+      regression_tolerance_pct math above — as of this writing that math has
+      no canonical enforcement anywhere in eng-standards itself (only
+      gramatr-paas's own scripts/check-coverage-regression.mjs implements
+      it, repo-locally). enforce-coverage-gate.ts checks a narrower,
+      upstream question — "does a coverage gate exist in CI at all" — not
+      the regression thresholds themselves.

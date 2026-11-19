@@ -1,0 +1,69 @@
+_meta:
+  name: ansible
+  description: Ansible playbook, role, and collection standards
+  domain: ansible
+  approver: Platform / Infra Lead
+
+engines:
+  ansible-core: ">=2.17"
+  python: ">=3.12"
+
+approved:
+  ansible-core:
+    version: ">=2.17"
+    description: Ansible engine — 2.17 is the current stable track
+  ansible-lint:
+    version: ">=24.0"
+    description: Lint + style enforcement for playbooks — must pass in CI before merge
+
+approved_collections:
+  community.general:
+    description: General-purpose modules (community-maintained)
+  ansible.posix:
+    description: POSIX modules — file, sysctl, firewalld, authorized_key
+  community.postgresql:
+    description: PostgreSQL management modules
+  community.docker:
+    description: Docker management modules
+
+rules:
+  all_tasks_require_name:
+    enforced: true
+    reason: Nameless tasks produce unreadable run output and make --start-at-task impossible
+  all_tasks_require_tags:
+    enforced: true
+    reason: At minimum one of install|config|service|users|backup|<service> required per task
+  no_hardcoded_secrets:
+    enforced: true
+    reason: All secrets via BWS — lookup('env', 'VAR') with pre-flight assert; never in vars or templates
+  template_header_required:
+    enforced: true
+    reason: All managed templates must start with "# {{ ansible_managed }}" header block
+  handlers_for_restarts:
+    enforced: true
+    reason: Service restarts via handlers notified from config tasks — not direct shell commands
+  check_mode_safe:
+    enforced: true
+    reason: All playbooks must be --check --diff safe before production application
+  no_shell_when_module_exists:
+    enforced: true
+    reason: Prefer ansible modules over shell/command — modules are idempotent, shell is not
+  two_play_pattern:
+    recommendation: true
+    reason: Play 1 installs on all group nodes; Play 2 configures on primary only (group[0])
+  variable_prefix_by_service:
+    enforced: true
+    reason: Service vars prefixed by service name (postgres_version, not version) to avoid collisions
+  dry_run_before_first_apply:
+    recommendation: true
+    reason: Run --check --diff for first application of any untested playbook
+
+prohibited:
+  ignore_errors_true:
+    reason: Do not mask errors — use failed_when with explicit conditions instead
+  bare_variables_in_when:
+    reason: Use explicit boolean test in when clauses — bare variable is ambiguous
+  hardcoded_passwords_in_vars:
+    reason: Zero tolerance — use lookup('env') with BWS-injected environment variables
+  ansible_cfg_modification:
+    reason: ansible.cfg is locked — do not modify; raise with Platform Lead if a setting is needed

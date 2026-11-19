@@ -1,0 +1,77 @@
+{
+  "_generated": "Generated from src/proxmox.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "engines": {
+    "proxmox-ve": ">=8.2"
+  },
+  "prohibited": [
+    "direct_gui_provisioning",
+    "local_storage_for_ha_vms",
+    "root_password_auth_on_vms",
+    "manual_firewall_rules"
+  ],
+  "prohibited_notes": {
+    "direct_gui_provisioning": "GUI changes are invisible to Ansible and drift from declared state — all changes via playbooks",
+    "local_storage_for_ha_vms": "VMs that need HA must use Ceph RBD — local storage cannot live-migrate or fail over",
+    "root_password_auth_on_vms": "SSH key auth only — no password auth; root login disabled; service accounts per Ansible standard",
+    "manual_firewall_rules": "Firewall rules via Ansible or Proxmox firewall API — no manual iptables or GUI edits"
+  },
+  "approved_storage_types": {
+    "vm_disks": {
+      "backend": "Ceph RBD",
+      "description": "All VM disks on Ceph RBD — live migration, snapshots, HA without shared SPOF"
+    },
+    "lxc_rootfs": {
+      "backend": "local-zfs or Ceph RBD",
+      "description": "ZFS for single-node LXCs; Ceph RBD for HA LXCs"
+    },
+    "iso_templates": {
+      "backend": "local",
+      "description": "ISOs and CT templates on local storage per node — not replicated (download on each node)"
+    }
+  },
+  "rules": {
+    "all_vms_managed_by_ansible": {
+      "enforced": true,
+      "reason": "VM/LXC creation and config via Ansible community.proxmox collection — no manual GUI provisioning"
+    },
+    "cpu_pin_for_inference_nodes": {
+      "recommendation": true,
+      "reason": "Pin vCPUs to physical cores on Jetson and GPU-adjacent VMs to reduce scheduling jitter"
+    },
+    "memory_ballooning_off_for_k8s": {
+      "enforced": true,
+      "reason": "Memory ballooning causes OOM on K8s nodes — set balloon=0 on all Kubernetes VMs"
+    },
+    "ha_group_for_critical_vms": {
+      "enforced": true,
+      "reason": "Services with VIPs (Caddy, DNS, Postgres primary) must be in a Pacemaker or Proxmox HA group"
+    },
+    "snapshots_before_major_changes": {
+      "recommendation": true,
+      "reason": "Take VM snapshot before OS upgrades or major config changes — rollback window is worth the disk"
+    },
+    "no_overcommit_ram_beyond_20pct": {
+      "enforced": true,
+      "reason": "RAM overcommit beyond 20% causes OOM kills under load — size VMs honestly"
+    },
+    "vlan_tagged_interfaces": {
+      "enforced": true,
+      "reason": "VMs must use tagged VLAN interfaces per network layout — flat bridging bypasses subnet isolation"
+    },
+    "vm_naming_convention": {
+      "enforced": true,
+      "description": "role-index pattern — e.g. kub-ai-01, jet-01, pve-node-01",
+      "reason": "Consistent naming is required for Ansible inventory host_vars and DNS entries"
+    },
+    "backup_retention_minimum": {
+      "enforced": true,
+      "description": "Minimum 3 daily + 1 weekly backup per production VM",
+      "reason": "Single backup is not a backup — 3-2-1 rule applies"
+    },
+    "ceph_osd_per_node_minimum": {
+      "recommendation": true,
+      "description": "Minimum 2 OSDs per data-center node for Ceph redundancy",
+      "reason": "Single OSD per node means any disk loss equals data loss"
+    }
+  }
+}

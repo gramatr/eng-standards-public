@@ -1,0 +1,97 @@
+{
+  "_generated": "Generated from src/python.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "engines": {
+    "python": ">=3.12"
+  },
+  "approved": {
+    "uv": ">=0.4",
+    "pytest": ">=8.0",
+    "pytest-cov": ">=5.0",
+    "pytest-asyncio": ">=0.23",
+    "ruff": ">=0.4",
+    "mypy": ">=1.10",
+    "pydantic": ">=2.0",
+    "python-dotenv": ">=1.0",
+    "httpx": ">=0.27",
+    "psycopg": ">=3.1",
+    "pyarrow": ">=14.0",
+    "pandas": ">=2.0"
+  },
+  "approved_optional": {
+    "psycopg2-binary": ">=2.9",
+    "sqlalchemy": ">=2.0",
+    "alembic": ">=1.13",
+    "fastapi": ">=0.110",
+    "flask": ">=3.0",
+    "uvicorn": ">=0.29",
+    "gunicorn": ">=22.0",
+    "celery": ">=5.3",
+    "redis": ">=5.0",
+    "boto3": ">=1.34",
+    "click": ">=8.1",
+    "rich": ">=13.0",
+    "textual": ">=0.60"
+  },
+  "prohibited": [
+    "black",
+    "isort",
+    "flake8",
+    "pylint",
+    "requests"
+  ],
+  "notes": {
+    "uv": "Package manager + lockfile (uv.lock) — the real, already-adopted convention in newer data-pipeline services. Prefer over bare pip/requirements.txt or Poetry for new projects.\n",
+    "pytest": "Test runner",
+    "pytest-cov": "Coverage plugin for pytest",
+    "pytest-asyncio": "Async test support",
+    "ruff": "Linter + formatter — replaces black, isort, flake8, pylint",
+    "mypy": "Static type checker",
+    "pydantic": "Runtime data validation and settings management",
+    "python-dotenv": "Environment variable loading",
+    "httpx": "HTTP client with async support — replaces requests",
+    "psycopg": "PostgreSQL adapter (psycopg3) — pipeline services write to Postgres directly; prefer over psycopg2-binary for new code.\n",
+    "pyarrow": "Columnar data format — the real interchange format used by data-pipeline services",
+    "pandas": "Dataframe library used across data-pipeline services",
+    "psycopg2-binary": "Legacy PostgreSQL adapter — still present in some services; migrate to psycopg (psycopg3) where practical",
+    "sqlalchemy": "ORM and SQL toolkit — v2 required (v1 API removed); only for services that need an ORM, not a default",
+    "alembic": "Database migrations for SQLAlchemy",
+    "fastapi": "Modern async API framework — for the minority of services that expose an HTTP API",
+    "flask": "Lightweight WSGI framework — v3 required (v2 EOL)",
+    "uvicorn": "ASGI server for FastAPI",
+    "gunicorn": "WSGI server for Flask — v22 has security fixes",
+    "celery": "Distributed task queue",
+    "redis": "Redis client",
+    "boto3": "AWS SDK",
+    "click": "CLI framework",
+    "rich": "Terminal output formatting",
+    "textual": "TUI framework"
+  },
+  "prohibited_notes": {
+    "black": "Use ruff format instead — ruff is a strict superset of black",
+    "isort": "Use ruff --select I instead — isort is redundant with ruff",
+    "flake8": "Use ruff check instead — ruff covers all flake8 rules and more",
+    "pylint": "Use ruff check + mypy — pylint is slow and redundant",
+    "requests": "Use httpx — async-capable, modern interface, active development"
+  },
+  "lsp": {
+    "required": "ruff",
+    "supplemental": "mypy",
+    "agent_requirement": {
+      "enforced": true,
+      "reason": "Agents generating or modifying Python must run ruff check + mypy before declaring work complete — type errors and lint violations caught at write time, not review time",
+      "how": "ruff check --fix <file> && mypy <file> — fix all errors; suppress only with # noqa: <code> and a rationale comment",
+      "ci_gate_note": "This is a hard gate, not advisory — a CI step that runs mypy with continue-on-error: true (or equivalent non-blocking config) contradicts enforced:true above and must not be shipped. If mypy isn't ready to block merge yet, set enforced:false here instead of running it non-blocking; a soft-fail check that looks like a gate is worse than no check.\n"
+    },
+    "claude_code": {
+      "enable": "pyright-lsp@claude-plugins-official",
+      "scope": "user",
+      "scope_reason": "see node.yaml's lsp.claude_code.scope_reason -- same ruling, same date, applies to both.",
+      "no_ruff_lsp": "There is no dedicated ruff LSP plugin in this marketplace as of 2026-07-25. Ruff stays enforced via CLI (ruff check/format) and the pre-push hook (agent_requirement above), not via live diagnostics. pyright-lsp covers type-checking diagnostics (hover, goToDefinition, documentSymbol); it does not lint or format.\n"
+    }
+  },
+  "complexity": {
+    "tool": "ruff (C901 mccabe complexity)",
+    "max_allowed": 15,
+    "note": "Matches node.yaml's floor for consistency across languages. Unlike node.yaml's 15 (already proven against real repos), this number has not yet been validated against a real Python codebase in this org -- adopted as a sane cross-language default, not yet battle-tested here. Revisit if it proves too strict/loose in practice.\n"
+  }
+}

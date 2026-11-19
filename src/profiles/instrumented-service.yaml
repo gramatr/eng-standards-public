@@ -1,0 +1,18 @@
+_meta:
+  name: instrumented-service
+  description: Any production service that emits Prometheus metrics and is monitored by the ops agent
+
+standards:
+  - observability
+  - security
+  - git
+
+coverage: coverage/thresholds.json
+
+notes:
+  applies_to: All services scraped by Prometheus — FastAPI, Flask, Node.js, or any long-running process
+  monitoring_agent: "Monitoring agent reads standards/observability.json as its reference for compliance checks"
+  dashboard_gate: Service must have a Grafana dashboard before being considered production-ready
+
+templates:
+  - templates/CLAUDE.python.md

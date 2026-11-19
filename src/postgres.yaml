@@ -1,0 +1,64 @@
+_meta:
+  name: postgres
+  description: PostgreSQL server version, schema, and query standards
+  domain: postgres
+  approver: Data Engineering Lead
+
+engines:
+  postgresql: ">=17"
+
+approved_base_images:
+  postgres:
+    image: "postgres:17-alpine"
+    description: Local dev and test only — prod uses CloudNativePG operator on Kubernetes
+
+approved_extensions:
+  pg_trgm:
+    description: Trigram similarity search — for fuzzy text matching
+  pgcrypto:
+    description: Cryptographic functions — for token hashing
+  uuid-ossp:
+    description: UUID generation — prefer gen_random_uuid() (built-in) over this for new schemas
+
+rules:
+  migrations_via_alembic:
+    enforced: true
+    reason: All schema changes via Alembic migration files — never manual DDL in production
+  primary_key_uuid:
+    recommendation: true
+    reason: UUID primary keys prevent enumeration attacks and simplify cross-service merges
+  explicit_schema_prefix:
+    enforced: true
+    reason: Always qualify table names with schema (public.users, not just users) — prevents search_path injection
+  no_superuser_for_app:
+    enforced: true
+    reason: Application connects with least-privilege service account — not gradmin or postgres superuser
+  indexes_on_foreign_keys:
+    enforced: true
+    reason: Foreign key columns without indexes cause sequential scans on JOIN — always add index on FK
+  created_at_updated_at_on_all_tables:
+    recommendation: true
+    reason: Audit columns on every table — required for incremental dbt models and data freshness checks
+  tenant_isolation_column:
+    enforced: true
+    reason: Multi-tenant tables must have a tenant_id column — enforced at query layer
+  not_null_for_required_fields:
+    enforced: true
+    reason: Express constraints in the schema — NOT NULL catches bugs that application validation misses
+  explain_analyze_before_production:
+    recommendation: true
+    reason: Run EXPLAIN ANALYZE on new queries in staging before deploying — catch seq scans early
+
+prohibited_patterns:
+  - pattern: "SELECT \\*"
+    reason: Always select explicit columns — SELECT * breaks downstream schema contracts and wastes I/O
+  - pattern: "DROP TABLE"
+    reason: Use Alembic migration with explicit down revision — bare DROP TABLE is not reversible
+  - pattern: "TRUNCATE"
+    reason: TRUNCATE bypasses row-level triggers and audit logging — use DELETE with WHERE clause
+
+prohibited:
+  gradmin_in_application_code:
+    reason: gradmin is a superuser for DBA tasks only — app code gets a named least-privilege account
+  migrations_without_down_revision:
+    reason: Every Alembic migration must have a downgrade() function — allows rollback

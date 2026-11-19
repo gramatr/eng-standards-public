@@ -1,0 +1,16 @@
+{
+  "_generated": "Generated from src/profiles/data-engineering.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "name": "data-engineering",
+  "description": "Python data pipeline + dbt transforms",
+  "standards": [
+    "python",
+    "dbt",
+    "prefect",
+    "docker"
+  ],
+  "coverage": "coverage/thresholds.json",
+  "templates": [
+    "templates/CLAUDE.python.md",
+    "templates/CLAUDE.dbt.md"
+  ]
+}

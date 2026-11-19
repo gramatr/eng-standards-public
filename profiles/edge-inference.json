@@ -1,0 +1,15 @@
+{
+  "_generated": "Generated from src/profiles/edge-inference.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "name": "edge-inference",
+  "description": "FastAPI inference service — NVIDIA Jetson (Orin) and RTX 4090 GPU nodes on k3s",
+  "standards": [
+    "python",
+    "docker",
+    "kubernetes",
+    "security"
+  ],
+  "coverage": "coverage/thresholds.json",
+  "templates": [
+    "templates/CLAUDE.python.md"
+  ]
+}

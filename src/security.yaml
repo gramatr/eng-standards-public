@@ -1,0 +1,67 @@
+_meta:
+  name: security
+  description: Security non-negotiables across all n90 services
+  domain: security
+  approver: Engineering Lead (any)
+
+approved_secret_backends:
+  bitwarden_secrets_manager:
+    description: Primary — bws CLI, lookup('env') in Ansible, env var injection in K8s secrets
+  kubernetes_secrets:
+    description: Secondary — for K8s-native injection via envFrom secretRef or volume mounts
+
+rules:
+  no_secrets_in_code:
+    enforced: true
+    reason: All secrets via BWS — lookup('env') in Ansible, os.environ in Python, process.env in Node
+  dependency_vulnerability_scanning:
+    enforced: false
+    reason: >
+      Not yet wired into either consumer repo's CI as of 2026-07-25 — no
+      pnpm audit / pip-audit step exists in gramatr-paas or platform-core.
+      This was previously listed as enforced:true, which was a false
+      attestation; downgraded until a real CI step lands. Target: pnpm audit
+      --audit-level=high (or osv-scanner, which handles pnpm lockfiles more
+      reliably) for Node, pip-audit for Python. Re-flip to enforced:true only
+      once a consumer repo's CI actually runs it and blocks merge on
+      CRITICAL/HIGH.
+  oidc_for_human_auth:
+    enforced: true
+    reason: Human authentication via Authentik OIDC — no local username/password databases
+  jwt_expiry_max:
+    enforced: true
+    description: Access tokens max 1 hour; refresh tokens max 7 days
+    reason: Long-lived tokens are a persistent breach risk — short TTL limits blast radius
+  api_keys_hashed_at_rest:
+    enforced: true
+    reason: API keys stored as bcrypt/argon2 hash — never plaintext; prefix stored separately for lookup
+  multi_tenancy_at_query_layer:
+    enforced: true
+    reason: tenant_filter() applied at data-access layer — defense-in-depth, not only at route guard
+  no_debug_mode_in_production:
+    enforced: true
+    reason: Flask/FastAPI debug=True exposes interactive REPL and stack traces in HTTP responses
+  tls_on_all_external_endpoints:
+    enforced: true
+    reason: All external endpoints via Caddy with TLS — no plaintext HTTP in production
+  no_verbose_errors_in_prod:
+    enforced: true
+    reason: Stack traces in HTTP responses leak internal structure — use structured error codes only
+  sast_on_pr:
+    recommendation: true
+    reason: Bandit (Python) and Biome security rules (TS) should run on every PR as non-blocking annotation
+  security_headers:
+    recommendation: true
+    description: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options on all HTTP responses
+    reason: Defense against XSS and clickjacking with zero application logic cost
+  mtls_internal_services:
+    recommendation: true
+    reason: Service-to-service calls within the cluster via mTLS through Cilium NetworkPolicy
+
+prohibited:
+  hardcoded_credentials:
+    reason: Zero tolerance — pre-commit hook and CI both block; no exceptions
+  http_without_tls:
+    reason: All production traffic over TLS via Caddy — plaintext HTTP is prohibited
+  root_database_user_in_app:
+    reason: Application services must use least-privilege DB accounts — not gradmin/superuser

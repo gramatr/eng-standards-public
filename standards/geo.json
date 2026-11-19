@@ -1,0 +1,80 @@
+{
+  "_generated": "Generated from src/geo.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "prohibited": [
+    "geometry_math_in_served_queries",
+    "storing_projected_geometry",
+    "deriving_area_from_stored_geometry_at_query_time"
+  ],
+  "prohibited_notes": {
+    "geometry_math_in_served_queries": "No dashboard, Superset chart or API query may call polygonArea*, polygonsIntersection* or polygonsUnion*. Serve precomputed weights. pointInPolygon for lookups is fine and is what ClickHouse is genuinely good at.\n",
+    "storing_projected_geometry": "No projected CRS in any storage column. Reproject to 4326 at load. Projected metres in a geometry column is the single most-repeated defect in this codebase.\n",
+    "deriving_area_from_stored_geometry_at_query_time": "Precompute area as a column at build time in the correct frame. cdl_crop_field_polygons does this correctly with area_acres - follow that pattern.\n"
+  },
+  "storage_crs": {
+    "canonical": "EPSG:4326",
+    "description": "WGS84 longitude/latitude decimal degrees. The ONE storage CRS for every geometry column in every database, US and Canada alike. GeoJSON (RFC 7946) mandates 4326, so storing anything else in a column named geojson is spec-violating, not merely inconsistent.\n",
+    "publisher_source_crs": {
+      "tiger": "EPSG:4269",
+      "statcan_boundary": "EPSG:3347",
+      "usda_cdl": "EPSG:5070"
+    },
+    "reason": "Only frame covering US + CA + territories in one system. Every external join is already in it (Google geo targets, FCC/ISED transmitter coordinates, IP geolocation). ClickHouse spherical functions take lon/lat degrees directly.\n"
+  },
+  "compute_crs": {
+    "area_and_distance": "geodesic",
+    "library": "pyproj.Geod(ellps='WGS84').geometry_area_perimeter()",
+    "description": "Ellipsoidal square metres computed directly from 4326. No projection choice, correct at every latitude including Alaska and the territories where a CONUS projection breaks.\n",
+    "equal_area_alternatives": {
+      "us_conus": "EPSG:5070"
+    },
+    "not_equal_area": [
+      "EPSG:3347",
+      "EPSG:3348"
+    ],
+    "reason": "StatCan themselves transform their Lambert conformal to Albers equal-area when they need land area (92-151-G product guide). A conformal projection is a valid delivery format and an invalid measurement frame.\n"
+  },
+  "rules": {
+    "crs_check_constraint_required": {
+      "enforced": true,
+      "reason": "Every table with a geometry column must carry a CHECK constraint asserting lon/lat range, as reference_geo.geo_geographies does (geojson_is_lonlat_epsg4326, proven to reject projected geometry with Code 469). Without it, projected metres land silently. INCIDENT 2026-08-15 - 892 Canadian rows sat in geo_geographies.geojson as EPSG:3347 metres alongside US rows in degrees: two coordinate systems in one column, no error. INCIDENT 2026-08-16 - signals_agriculture.cdl_crop_field_polygons holds 75,920,279 rows of projected metres in a bare `geometry String` with no CRS column and no constraint. Joining it to 4326 geometry returns zero rows silently.\n"
+    },
+    "crs_column_required": {
+      "enforced": true,
+      "reason": "Geometry tables must declare source_crs and target_crs as columns, not as tribal knowledge. A CHECK catches wrong MAGNITUDE; it cannot catch a wrong DATUM. NAD83 and WGS84 differ by 1-2 m in CONUS and are drifting - small, but real.\n"
+    },
+    "validity_repair_before_measurement": {
+      "enforced": true,
+      "reason": "Geometry must pass make_valid() in Python BEFORE any area or intersection is computed. ClickHouse has NO geometry repair functions at all - system.functions contains no makeValid, no isValid, no buffer, no simplify. It cannot detect broken input, let alone fix it. INCIDENT - polygonsIntersectionCartesian reported Platte County WY x Denver DMA as 24.02 square degrees for a county of 0.595: silently wrong on a self-intersecting polygon, no error raised. shapely returned the correct value. Nine self-intersecting US DMA polygons are still live.\n"
+    },
+    "winding_order_normalised_on_load": {
+      "enforced": true,
+      "reason": "Normalise exterior rings to counter-clockwise per RFC 7946 at load time. ClickHouse returns SIGNED area keyed to winding order, and the sign is inverted relative to the spec: a CCW unit square returns -1, a CW unit square returns +1. So correctly-formed GeoJSON yields NEGATIVE areas. Mixed winding across sources makes SUM(area) silently cancel instead of erroring. abs() hides the problem; normalising on load fixes it.\n"
+    },
+    "spherical_area_unit_conversion": {
+      "enforced": true,
+      "reason": "polygonAreaSpherical returns STERADIANS, not square metres. Multiply by R^2 where R = 6371008.8 m. Verified 2026-08-16 - a 1x1 degree box at the equator returns 0.00030461 sr against 0.00030462 sr expected, and 0.00021350 sr at latitude 45 (correctly smaller). Any query using it must name the constant, never inline it.\n"
+    },
+    "measurement_is_build_time": {
+      "enforced": true,
+      "reason": "Area, intersection and overlay weights are computed ONCE in Python at build time and written to ClickHouse as a result table. ClickHouse serves the result; it does not derive it. With a block-grain spine, arbitrary overlays resolve once into weights and every downstream query becomes a JOIN and a SUM with no geometry at all.\n"
+    },
+    "cartographic_vs_digital_declared": {
+      "recommendation": true,
+      "reason": "StatCan publishes cartographic AND digital boundary files that differ at the northern clip (83.1N vs 90N). Pick one deliberately per layer and record which in the registry.\n"
+    }
+  },
+  "prohibited_patterns": [
+    {
+      "pattern": "polygonAreaCartesian",
+      "reason": "Cartesian area on lon/lat yields square DEGREES - a unit that varies with latitude (a degree of longitude is ~111 km at the equator, ~78 km at 45N). Every pre-2026-08-16 overlap figure quoted in square degrees came from this. Use geodesic area in Python.\n"
+    },
+    {
+      "pattern": "polygonsIntersectionCartesian",
+      "reason": "Same degree-unit defect, and it returns silently wrong results on invalid input with no error. Compute intersections in Python after make_valid().\n"
+    },
+    {
+      "pattern": "polygonPerimeterCartesian",
+      "reason": "Degree-unit perimeter is meaningless. Use geodesic perimeter in Python."
+    }
+  ]
+}

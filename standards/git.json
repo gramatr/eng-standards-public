@@ -1,0 +1,91 @@
+{
+  "_generated": "Generated from src/git.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "prohibited": [
+    "force_push_to_main",
+    "commit_credentials",
+    "vendor_directories"
+  ],
+  "prohibited_notes": {
+    "force_push_to_main": "Rewrites shared history — use revert commits to undo changes",
+    "commit_credentials": "Zero tolerance — pre-commit hook blocks; use BWS and environment variables",
+    "vendor_directories": "Do not commit node_modules, .venv, __pycache__, or .pytest_cache"
+  },
+  "commit_format": {
+    "convention": "conventional-commits",
+    "spec": "https://www.conventionalcommits.org/en/v1.0.0/",
+    "max_subject_length": 72,
+    "types": {
+      "feat": "New feature — triggers minor version bump in semver",
+      "fix": "Bug fix — triggers patch version bump",
+      "chore": "Maintenance, dependency updates, no production change",
+      "docs": "Documentation only",
+      "refactor": "Code change that neither fixes a bug nor adds a feature",
+      "test": "Adding or modifying tests only",
+      "perf": "Performance improvement",
+      "ci": "CI/CD pipeline changes",
+      "revert": "Revert a previous commit",
+      "deploy": "Automated deployment commit (CD system only — not for humans)",
+      "standards": "eng-standards submodule version bump"
+    },
+    "scopes": [
+      "api",
+      "auth",
+      "dashboard",
+      "live-map",
+      "attribution",
+      "creatives",
+      "campaigns",
+      "reports",
+      "infra",
+      "superset",
+      "gramatr",
+      "deps",
+      "db",
+      "cache"
+    ],
+    "breaking_change_footer": "BREAKING CHANGE: <description>"
+  },
+  "branch_naming": {
+    "pattern": "<type>/<short-description>",
+    "examples": [
+      "feat/live-attribution-agency-rollup",
+      "fix/redis-ttl-overflow",
+      "chore/bump-python-3-12-2",
+      "infra/jetson-k3s-join"
+    ]
+  },
+  "rules": {
+    "no_direct_push_to_main": {
+      "enforced": true,
+      "reason": "All changes via PR with at least one approval — main is branch-protected"
+    },
+    "squash_merge_preferred": {
+      "recommendation": true,
+      "reason": "Squash keeps main history linear and conventional-commit clean"
+    },
+    "pr_description_required": {
+      "enforced": true,
+      "reason": "PR must describe what and why — the diff explains what changed, not why"
+    },
+    "submodule_on_main_only": {
+      "enforced": true,
+      "reason": "eng-standards submodule updates must point to main, not a feature branch"
+    },
+    "no_secrets_in_history": {
+      "enforced": true,
+      "reason": "Secrets in git history are permanent — pre-commit hook blocks; BWS for all credentials"
+    },
+    "full_suite_before_pr": {
+      "enforced": true,
+      "reason": "Run the complete test suite (e.g. `npx vitest run`) from the repo root before opening any PR. Running only the files you touched is not sufficient — mocks and module boundaries mean adjacent test files can break without touching them. CI is not a substitute for local verification; a CI failure after pushing wastes review time and blocks the release pipeline. If the PR adds new exported functions or new code paths, also run `npx vitest run --coverage` and verify no file in the coverage baseline regresses."
+    },
+    "run_lint_before_pr": {
+      "enforced": true,
+      "reason": "Run `pnpm lint` (Biome) from the repo root before opening any PR. Biome enforces SRP/DRY, import hygiene, and style rules. A lint failure after pushing wastes review time. Fix all errors before pushing; warnings may be deferred with a tracked issue but must not be silenced inline without a comment explaining why."
+    },
+    "no_ip_leakage_in_client_packages": {
+      "enforced": true,
+      "reason": "Installable client packages (anything shipped to end-user machines or npm) must not contain hardcoded internal endpoints, cluster topology (e.g. svc.cluster.local hostnames), proprietary configuration values, or credentials of any kind. All such values must be read from environment variables or a user-supplied config file at runtime. Health endpoints must not expose internal service names, versions, or topology to unauthenticated callers. Keys and secrets are handled exclusively by BWS."
+    }
+  }
+}

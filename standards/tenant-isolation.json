@@ -1,0 +1,94 @@
+{
+  "_generated": "Generated from src/tenant-isolation.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "prohibited": [
+    "serializer_layer_only_tenant_filter",
+    "scope_or_visibility_column_ambiguous_states",
+    "cleartext_pii_in_audit_logs",
+    "rls_policy_added_without_test"
+  ],
+  "prohibited_notes": {
+    "serializer_layer_only_tenant_filter": "A \"fix\" that only nulls / redacts fields in the response while leaving\nthe underlying row readable. This is the diagnostic fingerprint of the\nfailed-first-attempt patch pattern. True tenant isolation enforcement\nmust be at the data-access layer.\n",
+    "scope_or_visibility_column_ambiguous_states": "Data-model states where columns combine to produce contradictory\naccess decisions. Example: `scope='system' AND is_public=false` — the\nrow is neither tenant-owned nor explicitly public. Such rows cause\nRLS predicates to misclassify them. Validate at the data model level\nthat every row falls into exactly one well-defined visibility class.\n",
+    "cleartext_pii_in_audit_logs": "Client IPs, email addresses, or other PII written to audit_log in\ncleartext. Use hashing (SHA-256 for IPs) or tokenization. This rule\npreserves correct hashed-IP posture against future regressions.\n",
+    "rls_policy_added_without_test": "Adding a new entity_type / table without a corresponding RLS policy +\npaired-tenant integration test. Each new tenant-scoped surface MUST\nland with its test or it WILL leak on the first refactor.\n"
+  },
+  "rules": {
+    "enforce_at_data_access_layer": {
+      "enforced": true,
+      "description": "Tenant filtering MUST be enforced at the SQL / data-access layer (Postgres RLS policies, ClickHouse row policies, equivalent), NOT at the response-serializer layer (nulling-out fields, redacting payloads).",
+      "reason": "Response-layer \"fixes\" leave the underlying row readable and only mask\nthe response. A common failed-first-attempt pattern nulls `user_id` in\nthe response while leaving ownership inferable via other metadata fields.\nThe true fix moves enforcement down to SQL predicates so cross-tenant rows\nreturn `not_found` without ever entering the application's response\nshape. Defense-in-depth: serializer-layer redaction is FINE as an\nadditional layer but it MUST NOT be the only layer.\n"
+    },
+    "closed_oracle": {
+      "enforced": true,
+      "description": "Cross-tenant access-denied responses MUST be byte-for-byte identical to nonexistent-resource responses (modulo the requested ID).",
+      "reason": "A differential response shape between \"exists but you can't see it\" and\n\"does not exist\" enables enumeration of the entire dataset of any\ntenant via comparing response sizes, status codes, or shape. Test with a\nthree-UUID oracle (existing-forbidden + 2 synthetic) — the original code\npath must be verified closed. Audit assertion: `response(existing-\nforbidden, UUID_x) == response(nonexistent, UUID_y)`.\n"
+    },
+    "symmetric_read_write_protection": {
+      "enforced": true,
+      "description": "Every read-path RLS check MUST have a symmetric write-path RLS check. Cross-tenant writes (add, update, delete, relation creation) MUST return the same access-denied response as cross-tenant reads.",
+      "reason": "Asymmetric protection is a real-world failure mode — a service may\ncorrectly hide other-tenant data on read but accept a cross-tenant\nwrite that mutates it. Verify all distinct mutation paths (create, update,\ndelete, relation creation in both directions, soft-delete bypass attempts).\nAll must fail with `not found` style responses identical to read denials.\n"
+    },
+    "ambiguous_state_anti_pattern_forbidden": {
+      "enforced": true,
+      "description": "Multi-tenant tables MUST NOT have rows in an ambiguous visibility state where one column-combination yields contradictory access decisions. Specifically, NEVER `scope='system' AND is_public=false` (or any equivalent column pair where the policy is under-specified).",
+      "reason": "A common root-cause pattern: an RLS predicate reads\n`user_id = current_user OR scope = 'system'` while rows exist with\n`scope='system' AND is_public=false` — the predicate treats scope as a\npublic-bypass when it should require `is_public=true`. The data model\npermitted the ambiguous state, which is the underlying defect.\nRows must be EITHER tenant-owned (`scope='user'` or equivalent) OR\nintentionally shared (`is_public=true`) — never both nor neither.\n"
+    },
+    "rls_regression_test_suite": {
+      "enforced": true,
+      "description": "CI test suite MUST include at minimum five regression tests covering the read/write paths against cross-tenant UUIDs.",
+      "reason": "Lessons-learned codification from a production RLS regression audit.\nEach test below is mandatory; tooling may add more.\n",
+      "required_tests": {
+        "paired_tenant_integration": {
+          "description": "Authenticate as user A, run each tenant-scoped tool/path against a UUID known to be owned by user B. Assert `not_found` or access-denied. Cover all read paths the data model exposes."
+        },
+        "response_shape_parity": {
+          "description": "Existing-but-forbidden response equals nonexistent response byte-for-byte (modulo the requested UUID). Closes the enumeration oracle."
+        },
+        "content_field_assertions": {
+          "description": "Test must assert response metadata does not contain other-tenant identifiers (email, org UUID in cleartext, secret names) — not just `user_id !== other_user_id` which would pass a cosmetic mid-state fix."
+        },
+        "per_entity_type_sweep": {
+          "description": "For every entity_type / table in the registry, list / search returns only rows where `user_id = caller OR is_public = true` (or equivalent tenant predicate). Catches drift when a new entity_type is added without an RLS policy."
+        },
+        "write_path_symmetry": {
+          "description": "Every read-path test has a corresponding write-path test against the same cross-tenant UUID, verifying symmetric protection."
+        }
+      }
+    },
+    "rls_policy_count_invariant": {
+      "enforced": true,
+      "description": "Number of RLS policies in the schema MUST equal the number of tenant-scoped tables (or an explicit policy-per-table mapping). A CI check or post-migration assertion catches missing policies.",
+      "reason": "An entity_type / table added without a corresponding RLS policy is a\ntenant-isolation leak waiting to happen. A common failure: one path is\ncorrectly RLS-scoped while parallel paths leak — indicating policies\nexist but are not uniformly invoked. Count invariant catches this drift.\n"
+    },
+    "hashed_ip_in_audit_logs": {
+      "enforced": true,
+      "description": "Client IP addresses logged in audit_log entries MUST be hashed (SHA-256 or equivalent), never stored in cleartext.",
+      "reason": "Cleartext IPs in audit logs are PII per most privacy frameworks and\nincrease blast radius if the audit store is ever breached. Hashing\npreserves the correlation property auditors need without storing the\nraw value.\n"
+    },
+    "pagination_count_post_filter": {
+      "enforced": true,
+      "description": "Pagination `total_count` / `total` metadata MUST be computed POST-tenant-filter, not pre-filter.",
+      "reason": "A pre-filter total leaks the count of other-tenant data even when the\nresponse body is correctly filtered. This is a distinct read path\nthat is easy to miss — an attacker can use the count to estimate other\ntenants' dataset sizes.\n"
+    },
+    "dry_visibility_predicates": {
+      "enforced": true,
+      "description": "Visibility predicates MUST be implemented as a single helper invocation per data-access path, NOT inlined / duplicated across multiple sites. A lint rule SHOULD enforce this against detectable inline patterns (e.g., raw `scope = 'system' OR user_id = $1` substring matches in SQL files outside the canonical helper).",
+      "reason": "When the policy gets tightened in one place but inline copies remain\nacross multiple sites, those copies become the tenant-isolation leak.\nCodifies the lesson: \"visibility predicate is NOT DRY; inlined branches\nbypassed the policy gate.\" Single-helper-per-path is the structural fix.\n"
+    },
+    "access_context_canonical_pattern": {
+      "enforced": true,
+      "description": "New code introducing tenant-scoped data access MUST use the `AccessContext + UNION slices` architectural pattern (or the equivalent helper-encapsulated visibility-predicate pattern in non-Postgres stores), rather than constructing per-call ad-hoc visibility conditions.",
+      "reason": "Pattern introduced specifically to eliminate the cross-tenant read/write\nleak bug class. For services adopting this standard, the equivalent\nencapsulation is: one helper / context object per request that exposes\nthe caller's tenant identity and composes the SQL/predicate, used by\nALL data-access paths in that request lifecycle.\n"
+    },
+    "defense_in_depth_layers": {
+      "recommendation": true,
+      "description": "Beyond the mandatory SQL-layer enforcement, services SHOULD maintain at least one additional protective layer — route guard, authorization decorator, or response-time tenant assertion middleware.",
+      "reason": "The mandatory rule is SQL-layer enforcement. Additional layers catch\nbugs in the SQL policies themselves. Belt-and-suspenders for the\nhighest-stakes data flows.\n"
+    },
+    "rls_change_audit_row": {
+      "recommendation": true,
+      "description": "Any change to RLS policy definitions SHOULD fire an audit row via the canonical `infra-control-verified` flow with control_name `rls_policy_changed`, criterion `[CC6.1, CC8.1]`, including the policy diff in metadata.",
+      "reason": "Policy changes are CC6.1 (logical access) AND CC8.1 (change\nmanagement) events. The audit trail makes them defensible to auditors\nand allows policy-drift detection over time. Aligns with ADR-0009's\naudit pipeline pattern in the soc2-coordination repo.\n"
+    }
+  }
+}

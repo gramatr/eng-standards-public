@@ -1,0 +1,12 @@
+{
+  "_generated": "Generated from src/profiles/node-api.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "name": "node-api",
+  "description": "Node.js / TypeScript API or service — no frontend",
+  "standards": [
+    "node"
+  ],
+  "coverage": "coverage/thresholds.json",
+  "templates": [
+    "templates/CLAUDE.node.md"
+  ]
+}

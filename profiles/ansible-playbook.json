@@ -1,0 +1,14 @@
+{
+  "_generated": "Generated from src/profiles/ansible-playbook.yaml — do not edit by hand. Run: npx tsx generate.ts",
+  "name": "ansible-playbook",
+  "description": "Ansible infrastructure-as-code — playbooks, roles, and collections",
+  "standards": [
+    "ansible",
+    "security",
+    "git"
+  ],
+  "coverage": "coverage/thresholds.json",
+  "templates": [
+    "templates/CLAUDE.ansible.md"
+  ]
+}

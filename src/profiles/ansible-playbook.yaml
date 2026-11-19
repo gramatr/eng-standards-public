@@ -1,0 +1,11 @@
+_meta:
+  name: ansible-playbook
+  description: Ansible infrastructure-as-code — playbooks, roles, and collections
+
+standards:
+  - ansible
+  - security
+  - git
+
+templates:
+  - templates/CLAUDE.ansible.md
